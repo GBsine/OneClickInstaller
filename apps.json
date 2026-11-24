@@ -1,0 +1,38 @@
+[
+  { "id": "Google.Chrome", "name": "Google Chrome", "category": "Браузеры", "desc": "Популярный браузер", "desc_en": "Popular web browser" },
+  { "id": "Mozilla.Firefox", "name": "Mozilla Firefox", "category": "Браузеры", "desc": "Браузер с открытым кодом", "desc_en": "Open-source browser" },
+  { "id": "Opera.Opera", "name": "Opera", "category": "Браузеры", "desc": "Браузер Opera", "desc_en": "Opera browser" },
+  { "id": "Brave.Brave", "name": "Brave", "category": "Браузеры", "desc": "Браузер с блокировкой рекламы", "desc_en": "Browser with ad blocking" },
+
+  { "id": "Telegram.TelegramDesktop", "name": "Telegram", "category": "Мессенджеры", "desc": "Мессенджер Telegram", "desc_en": "Telegram messenger" },
+  { "id": "Discord.Discord", "name": "Discord", "category": "Мессенджеры", "desc": "Голосовой чат для игр", "desc_en": "Voice chat for gamers" },
+  { "id": "Rakuten.Viber", "name": "Viber", "category": "Мессенджеры", "desc": "Мессенджер Viber", "desc_en": "Viber messenger" },
+
+  { "id": "Spotify.Spotify", "name": "Spotify", "category": "Медиа", "desc": "Музыкальный стриминг", "desc_en": "Music streaming" },
+  { "id": "OBSProject.OBSStudio", "name": "OBS Studio", "category": "Медиа", "desc": "Запись и стриминг", "desc_en": "Recording and streaming" },
+
+  { "id": "7zip.7zip", "name": "7-Zip", "category": "Утилиты", "desc": "Архиватор", "desc_en": "Archiver" },
+  { "id": "RARLab.WinRAR", "name": "WinRAR", "category": "Утилиты", "desc": "Архиватор RAR", "desc_en": "RAR archiver" },
+  { "id": "Rufus.Rufus", "name": "Rufus", "category": "Утилиты", "desc": "Запись загрузочных USB", "desc_en": "Bootable USB writer" },
+  { "id": "qBittorrent.qBittorrent", "name": "qBittorrent", "category": "Утилиты", "desc": "Торрент-клиент", "desc_en": "Torrent client" },
+  { "id": "CrystalDewWorld.CrystalDiskInfo", "name": "CrystalDiskInfo", "category": "Утилиты", "desc": "Мониторинг дисков", "desc_en": "Disk health monitor" },
+  { "id": "CPUID.CPU-Z", "name": "CPU-Z", "category": "Утилиты", "desc": "Информация о процессоре", "desc_en": "CPU information" },
+  { "id": "TechPowerUp.GPU-Z", "name": "GPU-Z", "category": "Утилиты", "desc": "Информация о видеокарте", "desc_en": "Graphics card information" },
+
+  { "id": "Valve.Steam", "name": "Steam", "category": "Игры", "desc": "Игровая платформа", "desc_en": "Gaming platform" },
+  { "id": "EpicGames.EpicGamesLauncher", "name": "Epic Games", "category": "Игры", "desc": "Магазин игр Epic", "desc_en": "Epic games store" },
+  { "id": "GOG.Galaxy", "name": "GOG Galaxy", "category": "Игры", "desc": "Магазин игр GOG", "desc_en": "GOG games store" },
+  { "id": "Playnite.Playnite", "name": "Playnite", "category": "Игры", "desc": "Библиотека игр", "desc_en": "Game library" },
+  { "id": "ElectronicArts.EADesktop", "name": "EA app", "category": "Игры", "desc": "Магазин EA", "desc_en": "EA store" },
+  { "id": "Ubisoft.Connect", "name": "Ubisoft Connect", "category": "Игры", "desc": "Магазин Ubisoft", "desc_en": "Ubisoft store" },
+  { "id": "Blizzard.BattleNet", "name": "Battle.net", "category": "Игры", "desc": "Магазин Blizzard", "desc_en": "Blizzard store" },
+
+  { "id": "Microsoft.VisualStudioCode", "name": "Visual Studio Code", "category": "Разработка", "desc": "Редактор кода", "desc_en": "Code editor" },
+  { "id": "Python.Python.3.13", "name": "Python 3.13", "category": "Разработка", "desc": "Язык программирования", "desc_en": "Programming language" },
+
+  { "id": "Microsoft.VCRedist.2015+.x64", "name": "Visual C++ Redist", "category": "Компоненты", "desc": "Библиотеки для игр", "desc_en": "Game runtime libraries" },
+  { "id": "Microsoft.DotNet.DesktopRuntime.8", "name": ".NET Desktop Runtime 8", "category": "Компоненты", "desc": "Среда .NET", "desc_en": ".NET runtime" },
+  { "id": "EclipseAdoptium.Temurin.21.JRE", "name": "Java JRE 21", "category": "Компоненты", "desc": "Java Runtime", "desc_en": "Java runtime" },
+
+  { "id": "AnyDesk.AnyDesk", "name": "AnyDesk", "category": "Удалённый доступ", "desc": "Удалённый доступ", "desc_en": "Remote desktop" }
+]

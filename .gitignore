@@ -1,0 +1,7 @@
+logs/
+settings.json
+build/payload/
+build/payload.zip
+build/OneClickInstaller.exe
+build/app.ico
+build/app.png
