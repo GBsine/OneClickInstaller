@@ -131,6 +131,10 @@ $script:Strings = @{
         'status.selected'   = 'Выбрано: {0} из {1}'
         'status.installing' = '[{0}/{1}] Установка: {2}'
         'status.time'       = 'Установка: {0}  ·  {1} с'
+        'status.checking'   = 'Проверяю уже установленные программы…'
+        'status.warming'    = 'Обновляю список пакетов winget — первый раз это до минуты…'
+        'status.downloading'= 'Скачивание: {0}  ·  {1}'
+        'status.sec'        = '{0} с'
         'status.stopping'   = 'Останавливаю после текущей программы…'
         'status.done'       = 'Готово. Установлено: {0}, уже было: {1}, ошибок: {2}'
         'status.stopped'    = 'Остановлено. Установлено: {0}, ошибок: {1}'
@@ -177,6 +181,10 @@ $script:Strings = @{
         'status.selected'   = 'Selected: {0} of {1}'
         'status.installing' = '[{0}/{1}] Installing: {2}'
         'status.time'       = 'Installing: {0}  ·  {1}s'
+        'status.checking'   = 'Checking which programs are already installed…'
+        'status.warming'    = 'Refreshing the winget package list — the first time can take a minute…'
+        'status.downloading'= 'Downloading: {0}  ·  {1}'
+        'status.sec'        = '{0}s'
         'status.stopping'   = 'Stopping after the current app…'
         'status.done'       = 'Done. Installed: {0}, already installed: {1}, failed: {2}'
         'status.stopped'    = 'Stopped. Installed: {0}, failed: {1}'
@@ -273,6 +281,62 @@ function Get-WingetPath {
     return $null
 }
 
+function Get-InstalledIds {
+    param([string]$WingetPath)
+
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $tmp = Join-Path $env:TEMP ('oci-export-{0}.json' -f [Guid]::NewGuid().ToString('N'))
+
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName               = $WingetPath
+    $psi.Arguments              = 'export -o "{0}" --accept-source-agreements --disable-interactivity' -f $tmp
+    $psi.UseShellExecute        = $false
+    $psi.CreateNoWindow         = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding  = [System.Text.Encoding]::UTF8
+
+    $p = [System.Diagnostics.Process]::new()
+    $p.StartInfo = $psi
+    try { [void]$p.Start() } catch { return $set }
+
+    $outTask = $p.StandardOutput.ReadToEndAsync()
+    $errTask = $p.StandardError.ReadToEndAsync()
+    $started = Get-Date
+    $warned  = $false
+
+    while (-not $p.HasExited) {
+        if ($script:StopRequested) { try { $p.Kill() } catch { }; break }
+        if (-not $warned -and ((Get-Date) - $started).TotalSeconds -ge 5) {
+            $warned = $true
+            Set-Status (T 'status.warming')
+        }
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 100
+    }
+
+    try { [void]$p.WaitForExit(8000) } catch { }
+    try { [void]$outTask.GetAwaiter().GetResult(); [void]$errTask.GetAwaiter().GetResult() } catch { }
+    try { $p.Dispose() } catch { }
+
+    if (Test-Path -LiteralPath $tmp) {
+        try {
+            $raw = [System.IO.File]::ReadAllText($tmp, [System.Text.Encoding]::UTF8)
+            $json = ConvertFrom-Json -InputObject $raw
+            foreach ($src in @($json.Sources)) {
+                foreach ($pkg in @($src.Packages)) {
+                    $pid2 = [string]$pkg.PackageIdentifier
+                    if ($pid2) { [void]$set.Add($pid2) }
+                }
+            }
+        } catch { }
+        try { Remove-Item -LiteralPath $tmp -Force } catch { }
+    }
+
+    return $set
+}
+
 function Get-ResultKind {
     param([int]$Code, [string]$Output)
     if ($Code -eq 0 -or $Code -eq 3010) { return 'ok' }
@@ -319,32 +383,73 @@ function Invoke-Winget {
         return [pscustomobject]@{ Code = -1; Output = $_.Exception.Message }
     }
 
-    $outTask = $p.StandardOutput.ReadToEndAsync()
-    $errTask = $p.StandardError.ReadToEndAsync()
+    $outLines = New-Object 'System.Collections.Generic.List[string]'
+    $errLines = New-Object 'System.Collections.Generic.List[string]'
+    $readOut = $null; $readErr = $null
+    try { $readOut = $p.StandardOutput.ReadLineAsync() } catch { }
+    try { $readErr = $p.StandardError.ReadLineAsync() } catch { }
+
     $started = Get-Date
     $lastSec = -1
+    $stage   = ''
+    $pct     = ''
 
-    while (-not $p.HasExited) {
+    while ($true) {
+        if ($readOut -and $readOut.IsCompleted) {
+            $line = $null
+            try { $line = $readOut.Result } catch { }
+            if ($null -eq $line) {
+                $readOut = $null
+            } else {
+                [void]$outLines.Add($line)
+                if ($line -match '(?i)download') { $stage = 'download' }
+                elseif ($line -match '(?i)install|starting|extract|verify') { if ($stage -ne 'download') { $stage = 'install' } }
+                if ($line -match '(\d{1,3})\s*%') { $pct = $matches[1] + '%' }
+                try { $readOut = $p.StandardOutput.ReadLineAsync() } catch { $readOut = $null }
+            }
+        }
+        if ($readErr -and $readErr.IsCompleted) {
+            $eline = $null
+            try { $eline = $readErr.Result } catch { }
+            if ($null -eq $eline) {
+                $readErr = $null
+            } else {
+                [void]$errLines.Add($eline)
+                try { $readErr = $p.StandardError.ReadLineAsync() } catch { $readErr = $null }
+            }
+        }
+
+        $finished = $p.HasExited -and -not $readOut -and -not $readErr
+        if ($finished) { break }
+
         if ($script:StopRequested) {
             try { $p.Kill() } catch { }
             break
         }
+
         $sec = [int]((Get-Date) - $started).TotalSeconds
         if ($sec -ne $lastSec) {
             $lastSec = $sec
-            Set-Status ((T 'status.time') -f $DisplayName, $sec)
+            if ($stage -eq 'download') {
+                $suffix = if ($pct) { $pct } else { (T 'status.sec') -f $sec }
+                Set-Status ((T 'status.downloading') -f $DisplayName, $suffix)
+            } elseif ($stage -eq 'install') {
+                Set-Status ((T 'status.time') -f $DisplayName, $sec)
+            } else {
+                Set-Status ((T 'status.time') -f $DisplayName, $sec)
+            }
         }
         [System.Windows.Forms.Application]::DoEvents()
         Start-Sleep -Milliseconds 60
     }
 
     try { [void]$p.WaitForExit(5000) } catch { }
-    $stdout = ''; $stderr = ''; $code = -1
-    try { $stdout = $outTask.GetAwaiter().GetResult() } catch { }
-    try { $stderr = $errTask.GetAwaiter().GetResult() } catch { }
+    $code = -1
     try { $code = $p.ExitCode } catch { }
     try { $p.Dispose() } catch { }
 
+    $stdout = ($outLines -join "`r`n")
+    $stderr = ($errLines -join "`r`n")
     return [pscustomobject]@{ Code = $code; Output = (($stdout + "`r`n" + $stderr).Trim()) }
 }
 
@@ -392,11 +497,28 @@ function Start-Install {
     Add-LogLine ('==== Начало установки: {0} программ ====' -f $targets.Count)
     Add-LogLine ('Режим: {0}' -f $(if ($script:chkSilent.Checked) { 'тихий' } else { 'с диалогами установщиков' }))
 
+    Set-Status (T 'status.checking')
+    Add-LogLine 'Проверяю уже установленные программы…'
+    $installed = $null
+    try { $installed = Get-InstalledIds -WingetPath $winget } catch { $installed = $null }
+    if ($installed) { Add-LogLine ('winget знает про установленные пакеты: {0}' -f $installed.Count) }
+
     $index = 0
     foreach ($app in $targets) {
         if ($script:StopRequested) { break }
         $index++
         $item = $script:Items[[string]$app.id]
+
+        if ($installed -and $installed.Contains([string]$app.id)) {
+            $already++
+            $script:StatusKeys[[string]$app.id] = 'already'
+            $item.SubItems[3].Text = (T 'state.already')
+            $item.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
+            Add-LogLine ('--- {0} ({1}) уже установлено, пропускаю' -f $app.name, $app.id)
+            $script:progress.Value = [Math]::Min($index, $script:progress.Maximum)
+            continue
+        }
+
         $script:StatusKeys[[string]$app.id] = 'installing'
         $item.SubItems[3].Text = (T 'state.installing')
         $item.ForeColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
@@ -431,7 +553,11 @@ function Start-Install {
 
         Add-LogLine ('<== {0}: {1}, код {2}, {3} с' -f $app.id, $kind, $result.Code, $elapsed)
         if ($result.Output) {
-            foreach ($line in ($result.Output -split "`r?`n")) { Add-LogLine ('    ' + $line) }
+            foreach ($line in ($result.Output -split "`r?`n")) {
+                if ($line -match '[█▒░]') { continue }
+                if ($line.Trim() -match '^[-\\|/]$') { continue }
+                Add-LogLine ('    ' + $line)
+            }
         }
         Add-LogLine ('    Итог: установлено={0}, уже было={1}, ошибок={2}, отменено={3}' -f $ok, $already, $fail, $cancelled)
 
