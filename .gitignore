@@ -1,7 +1,6 @@
 logs/
 settings.json
-build/payload/
-build/payload.zip
-build/OneClickInstaller.exe
-build/app.ico
-build/app.png
+build/
+native/OneClickInstaller.exe
+native/app.ico
+native/app.png

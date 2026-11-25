@@ -1,13 +1,14 @@
-# Builds OneClickInstaller.exe (single file with script, apps.json and icons inside).
-# Run: powershell -ExecutionPolicy Bypass -File build\build.ps1
+# Собирает нативный OneClickInstaller.exe (C# WinForms, без PowerShell и самораспаковки).
+# Запуск: powershell -NoProfile -ExecutionPolicy Bypass -File native\build.ps1
 
 $ErrorActionPreference = 'Stop'
-$build = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root  = Split-Path -Parent $build
+$native = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root   = Split-Path -Parent $native
+$out    = Join-Path $native 'OneClickInstaller.exe'
 
 Add-Type -AssemblyName System.Drawing
 
-# ---- 1. app icon (256x256 PNG -> ICO) ----
+# ---- 1. иконка приложения (256x256 PNG -> ICO) ----
 $size = 256
 $bmp = New-Object System.Drawing.Bitmap $size, $size
 $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -39,10 +40,10 @@ $bar.CloseFigure()
 $g.FillPath($white, $bar)
 $g.Dispose()
 
-$png = Join-Path $build 'app.png'
+$png = Join-Path $native 'app.png'
 $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
 $pngBytes = [System.IO.File]::ReadAllBytes($png)
-$fs = [System.IO.File]::Create((Join-Path $build 'app.ico'))
+$fs = [System.IO.File]::Create((Join-Path $native 'app.ico'))
 $bw = New-Object System.IO.BinaryWriter $fs
 $bw.Write([uint16]0); $bw.Write([uint16]1); $bw.Write([uint16]1)
 $bw.Write([byte]0); $bw.Write([byte]0); $bw.Write([byte]0); $bw.Write([byte]0)
@@ -51,34 +52,37 @@ $bw.Write([uint32]$pngBytes.Length); $bw.Write([uint32]22)
 $bw.Write($pngBytes)
 $bw.Close(); $fs.Close(); $bmp.Dispose()
 
-# ---- 2. payload (script + apps.json + icons) ----
-$payload = Join-Path $build 'payload'
-if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $payload | Out-Null
-Copy-Item (Join-Path $root 'OneClickInstaller.ps1') $payload
-Copy-Item (Join-Path $root 'apps.json') $payload
-Copy-Item (Join-Path $root 'icons') $payload -Recurse
-Compress-Archive -Path (Join-Path $payload '*') -DestinationPath (Join-Path $build 'payload.zip') -Force
+# ---- 2. ресурсы: apps.json + иконки ----
+$resources = @()
+$resources += ('/resource:"{0}",apps.json' -f (Join-Path $root 'apps.json'))
+foreach ($icon in Get-ChildItem (Join-Path $root 'icons') -Filter *.png) {
+    $resources += ('/resource:"{0}",icons.{1}' -f $icon.FullName, $icon.Name)
+}
 
-# ---- 3. compile ----
+# ---- 3. компиляция ----
 $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { throw "csc.exe not found: $csc" }
 
-Push-Location $build
+$cscArgs = @(
+    '/nologo', '/target:winexe', '/platform:anycpu', '/optimize+',
+    '/win32icon:app.ico',
+    '/win32manifest:app.manifest',
+    ('/out:"{0}"' -f $out),
+    '/r:System.dll', '/r:System.Core.dll',
+    '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll',
+    '/r:System.Runtime.Serialization.dll'
+) + $resources + @('OneClickInstaller.cs')
+
+Push-Location $native
 try {
-    & $csc /nologo /target:winexe /platform:anycpu /optimize+ `
-        /win32icon:app.ico /out:OneClickInstaller.exe `
-        /resource:payload.zip,payload.zip `
-        /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
-        /r:System.Windows.Forms.dll /r:System.Drawing.dll Launcher.cs
+    & $csc $cscArgs
     if ($LASTEXITCODE -ne 0) { throw "csc failed with $LASTEXITCODE" }
 } finally {
     Pop-Location
 }
 
-$exe = Join-Path $build 'OneClickInstaller.exe'
-"Built: $exe ($((Get-Item $exe).Length) bytes)"
+"Built: $out ($((Get-Item $out).Length) bytes)"
 
 $desktopExe = Join-Path ([Environment]::GetFolderPath('Desktop')) 'OneClickInstaller.exe'
-Copy-Item $exe $desktopExe -Force
+Copy-Item $out $desktopExe -Force
 "Copied: $desktopExe"
